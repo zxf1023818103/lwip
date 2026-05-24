@@ -251,7 +251,13 @@ configure_file(${LWIP_DIR}/src/include/lwip/init.h.cmake.in ${LWIP_DIR}/src/incl
 set(DOXYGEN_DIR ${LWIP_DIR}/doc/doxygen)
 set(DOXYGEN_OUTPUT_DIR output)
 set(DOXYGEN_IN  ${LWIP_DIR}/doc/doxygen/lwip.Doxyfile.cmake.in)
-set(DOXYGEN_OUT ${LWIP_DIR}/doc/doxygen/lwip.Doxyfile)
+# Bouffalo-port: write the configured Doxyfile under CMAKE_BINARY_DIR instead
+# of the submodule source tree. When multiple builds against the same lwip
+# checkout run in parallel (e.g. building several Bouffalo chips at once via
+# `make -C project all`), the original `${LWIP_DIR}/doc/doxygen/lwip.Doxyfile`
+# path makes both cmake configure passes race on the same file and one of
+# them dies with "configure_file: No such file or directory".
+set(DOXYGEN_OUT ${CMAKE_BINARY_DIR}/lwip.Doxyfile)
 configure_file(${DOXYGEN_IN} ${DOXYGEN_OUT})
 
 find_package(Doxygen)
