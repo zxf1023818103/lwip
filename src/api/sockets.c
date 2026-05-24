@@ -561,6 +561,7 @@ free_socket_locked(struct lwip_sock *sock, int is_tcp, struct netconn **conn,
 
   *lastdata = sock->lastdata;
   sock->lastdata.pbuf = NULL;
+  sock->select_waiting = 0;
   *conn = sock->conn;
   sock->conn = NULL;
   return 1;
@@ -688,7 +689,6 @@ lwip_accept(int s, struct sockaddr *addr, socklen_t *addrlen)
     err = netconn_peer(newconn, &naddr, &port);
     if (err != ERR_OK) {
       LWIP_DEBUGF(SOCKETS_DEBUG, ("lwip_accept(%d): netconn_peer failed, err=%d\n", s, err));
-      netconn_delete(newconn);
       free_socket(nsock, 1);
       sock_set_errno(sock, err_to_errno(err));
       done_socket(sock);
@@ -2102,7 +2102,8 @@ lwip_select(int maxfdp1, fd_set *readset, fd_set *writeset, fd_set *exceptset,
             (exceptset && FD_ISSET(i, exceptset))) {
           struct lwip_sock *sock;
           SYS_ARCH_PROTECT(lev);
-          sock = tryget_socket_unconn_locked(i);
+          sock = tryget_socket_unconn_nouse(i);
+          LWIP_ASSERT("socket gone at the end of select", sock != NULL);
           if (sock != NULL) {
             /* for now, handle select_waiting==0... */
             LWIP_ASSERT("sock->select_waiting > 0", sock->select_waiting > 0);
@@ -2110,7 +2111,6 @@ lwip_select(int maxfdp1, fd_set *readset, fd_set *writeset, fd_set *exceptset,
               sock->select_waiting--;
             }
             SYS_ARCH_UNPROTECT(lev);
-            done_socket(sock);
           } else {
             SYS_ARCH_UNPROTECT(lev);
             /* Not a valid socket */
@@ -3010,6 +3010,10 @@ lwip_getsockopt_impl(int s, int level, int optname, void *optval, socklen_t *opt
           *(int *)optval = udp_is_flag_set(sock->conn->pcb.udp, UDP_FLAGS_NOCHKSUM) ? 1 : 0;
           break;
 #endif /* LWIP_UDP*/
+        case SO_CONNINFO:
+          LWIP_SOCKOPT_CHECK_OPTLEN_CONN(sock, *optlen, void *);
+          *(void **)optval = sock->conn;
+          break;
         default:
           LWIP_DEBUGF(SOCKETS_DEBUG, ("lwip_getsockopt(%d, SOL_SOCKET, UNIMPL: optname=0x%x, ..)\n",
                                       s, optname));
@@ -4156,5 +4160,10 @@ lwip_socket_drop_registered_mld6_memberships(int s)
   done_socket(sock);
 }
 #endif /* LWIP_IPV6_MLD */
+
+#ifdef BUGKILLER
+#include <bugkiller/bugkiller_socket_dump.inc>
+#include <bugkiller/bugkiller_mbox_dump.inc>
+#endif
 
 #endif /* LWIP_SOCKET */

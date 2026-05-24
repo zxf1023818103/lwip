@@ -117,7 +117,7 @@ typedef u32_t socklen_t;
 #error "IOV_MAX larger than supported by LwIP"
 #endif /* IOV_MAX */
 
-#if !defined(iovec)
+#if !defined(iovec) && !defined(IOVEC_DEFINED)
 struct iovec {
   void  *iov_base;
   size_t iov_len;
@@ -219,6 +219,7 @@ struct ifreq {
 #define SO_CONTIMEO     0x1009 /* Unimplemented: connect timeout */
 #define SO_NO_CHECK     0x100a /* don't create UDP checksum */
 #define SO_BINDTODEVICE 0x100b /* bind to device */
+#define SO_CONNINFO     0x100e /* RWNX Specific: Read Only, get pointer on connection info */
 
 /*
  * Structure used for manipulating linger option.

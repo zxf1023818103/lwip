@@ -51,6 +51,8 @@
 #include "lwip/ip6_addr.h"
 #include "lwip/prot/tcp.h"
 
+#include "lwip/timeouts.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -66,6 +68,16 @@ void             tcp_tmr     (void);  /* Must be called every
    intervals (instead of calling tcp_tmr()). */
 void             tcp_slowtmr (void);
 void             tcp_fasttmr (void);
+
+#if TCP_TIMER_PRECISE_NEEDED
+/**
+ * bouffalo lp change
+ * TCP_TMR Optimization, only enable tcp_tmr MAX_TCP_ONCE_RUNNING_TIME
+ */
+void             tcp_keepalive_tmr(void *arg);
+void             tcp_keepalive_timer_stop(struct tcp_pcb *pcb);
+void             tcp_keepalive_timer_start(struct tcp_pcb *pcb);
+#endif
 
 /* Call this from a netif driver (watch out for threading issues!) that has
    returned a memory error on transmit and now has free buffers to send more.
@@ -121,12 +133,14 @@ err_t            tcp_process_refused_data(struct tcp_pcb *pcb);
 #endif /* TCP_TMR_INTERVAL */
 
 #ifndef TCP_FAST_INTERVAL
-#define TCP_FAST_INTERVAL      TCP_TMR_INTERVAL /* the fine grained timeout in milliseconds */
+#define TCP_FAST_INTERVAL      (2*TCP_TMR_INTERVAL) /* the fine grained timeout in milliseconds */
 #endif /* TCP_FAST_INTERVAL */
 
 #ifndef TCP_SLOW_INTERVAL
 #define TCP_SLOW_INTERVAL      (2*TCP_TMR_INTERVAL)  /* the coarse grained timeout in milliseconds */
 #endif /* TCP_SLOW_INTERVAL */
+
+#define TCP_POLL_INTERVAL 50
 
 #define TCP_FIN_WAIT_TIMEOUT 20000 /* milliseconds */
 #define TCP_SYN_RCVD_TIMEOUT 20000 /* milliseconds */
@@ -326,6 +340,7 @@ struct tcp_seg {
 extern struct tcp_pcb *tcp_input_pcb;
 extern u32_t tcp_ticks;
 extern u8_t tcp_active_pcbs_changed;
+extern const u8_t tcp_persist_backoff[7];
 
 /* The TCP PCB lists. */
 union tcp_listen_pcbs_t { /* List of all TCP PCBs in LISTEN state. */

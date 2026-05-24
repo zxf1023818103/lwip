@@ -254,9 +254,14 @@ struct netif_hint {
 #define LWIP_NETIF_USE_HINTS              0
 #endif /* LWIP_NETIF_HWADDRHINT */
 
+typedef void (*dhcp_quick_connect_callback_fn)(struct netif *netif);
 /** Generic data structure used for all lwIP network interfaces.
  *  The following fields should be filled in by the initialization
  *  function for the device driver: hwaddr_len, hwaddr[], mtu, flags */
+struct addr_ext {
+  u8_t arp_for_us_disable;
+  dhcp_quick_connect_callback_fn dhcp_qc_callback;
+};
 struct netif {
 #if !LWIP_SINGLE_NETIF
   /** pointer to next in linked list */
@@ -282,6 +287,11 @@ struct netif {
   u32_t ip6_addr_valid_life[LWIP_IPV6_NUM_ADDRESSES];
   u32_t ip6_addr_pref_life[LWIP_IPV6_NUM_ADDRESSES];
 #endif /* LWIP_IPV6_ADDRESS_LIFETIMES */
+
+#ifdef CONFIG_ENABLE_IPV6_ADDR_CALLBACK
+  void (*ipv6_addr_cb)(struct netif *netif, u8_t ip_index);
+#endif
+
 #endif /* LWIP_IPV6 */
   /** This function is called by the network device driver
    *  to pass a packet up the TCP/IP stack. */
@@ -387,7 +397,13 @@ struct netif {
   u16_t loop_cnt_current;
 #endif /* LWIP_LOOPBACK_MAX_PBUFS */
 #endif /* ENABLE_LOOPBACK */
+#if LWIP_IPV4 && IP_NAPT
+  u8_t napt;
+#endif
+  struct addr_ext addr_ext;
 };
+void dhcp_set_dhcp_quick_connect_callback(struct netif *netif, dhcp_quick_connect_callback_fn qc_callback);
+void dhcp_unset_dhcp_quick_connect_callback(struct netif *netif);
 
 #if LWIP_CHECKSUM_CTRL_PER_NETIF
 #define NETIF_SET_CHECKSUM_CTRL(netif, chksumflags) do { \
@@ -418,6 +434,8 @@ struct netif *netif_add(struct netif *netif,
                             void *state, netif_init_fn init, netif_input_fn input);
 void netif_set_addr(struct netif *netif, const ip4_addr_t *ipaddr, const ip4_addr_t *netmask,
                     const ip4_addr_t *gw);
+void netif_get_addr_ext(struct netif *netif, struct addr_ext *ext);
+void netif_set_addr_ext(struct netif *netif, struct addr_ext *ext);
 #else /* LWIP_IPV4 */
 struct netif *netif_add(struct netif *netif, void *state, netif_init_fn init, netif_input_fn input);
 #endif /* LWIP_IPV4 */

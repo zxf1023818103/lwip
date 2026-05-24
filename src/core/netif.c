@@ -49,6 +49,7 @@
  */
 
 #include "lwip/opt.h"
+#include "lwip/tcpip.h"
 
 #include <string.h> /* memset */
 #include <stdlib.h> /* atoi */
@@ -363,6 +364,10 @@ netif_add(struct netif *netif,
   netif->loop_cnt_current = 0;
 #endif /* ENABLE_LOOPBACK && LWIP_LOOPBACK_MAX_PBUFS */
 
+#if IP_NAPT
+  netif->napt = 0;
+#endif /* IP_NAPT */
+
 #if LWIP_IPV4
   netif_set_addr(netif, ipaddr, netmask, gw);
 #endif /* LWIP_IPV4 */
@@ -642,6 +647,28 @@ netif_set_gw(struct netif *netif, const ip4_addr_t *gw)
     netif_invoke_ext_callback(netif, LWIP_NSC_IPV4_GATEWAY_CHANGED, &args);
 #endif
   }
+}
+
+void
+netif_get_addr_ext(struct netif *netif, struct addr_ext *ext)
+{
+  LOCK_TCPIP_CORE();
+  if(netif) {
+    ext->arp_for_us_disable = netif->addr_ext.arp_for_us_disable;
+    ext->dhcp_qc_callback = netif->addr_ext.dhcp_qc_callback;
+  }
+  UNLOCK_TCPIP_CORE();
+}
+
+void
+netif_set_addr_ext(struct netif *netif, struct addr_ext *ext)
+{
+  LOCK_TCPIP_CORE();
+  if(netif) {
+    netif->addr_ext.arp_for_us_disable = ext->arp_for_us_disable;
+    netif->addr_ext.dhcp_qc_callback = ext->dhcp_qc_callback;
+  }
+  UNLOCK_TCPIP_CORE();
 }
 
 /**

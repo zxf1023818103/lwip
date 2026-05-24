@@ -55,17 +55,21 @@
  *
  */
 
-#include "lwip/apps/mdns.h"
-#include "lwip/apps/mdns_priv.h"
-#include "lwip/netif.h"
-#include "lwip/udp.h"
-#include "lwip/ip_addr.h"
-#include "lwip/mem.h"
-#include "lwip/prot/dns.h"
-#include "lwip/prot/iana.h"
-#include "lwip/timeouts.h"
+#include <lwip/apps/mdns_priv.h>
+#include <lwip/apps/mdns.h>
+#include <lwip/netif.h>
+#include <lwip/udp.h>
+#include <lwip/ip_addr.h>
+#include <lwip/mem.h>
+#include <lwip/prot/dns.h>
+#include <lwip/prot/iana.h>
+#include <lwip/timeouts.h>
 
+#include <stdio.h>
 #include <string.h>
+#include <stdint.h>
+#include <lwip/opt.h>
+#include "mdns_server.h"
 
 #if LWIP_MDNS_RESPONDER
 
@@ -2085,12 +2089,12 @@ mdns_resp_add_netif(struct netif *netif, const char *hostname, u32_t dns_ttl)
   }
 #endif
 #if LWIP_IPV6
-
   res = mld6_joingroup_netif(netif, ip_2_ip6(&v6group));
   if (res != ERR_OK) {
     goto cleanup;
   }
 #endif
+
   mdns_resp_restart(netif);
 
   return ERR_OK;
@@ -2381,7 +2385,8 @@ void
 mdns_resp_init(void)
 {
   err_t res;
-
+  static u8_t flag = 1;
+  
   /* LWIP_ASSERT_CORE_LOCKED(); is checked by udp_new() */
 
   mdns_pcb = udp_new_ip_type(IPADDR_TYPE_ANY);
@@ -2396,12 +2401,91 @@ mdns_resp_init(void)
   LWIP_ASSERT("Failed to bind pcb", res == ERR_OK);
   udp_recv(mdns_pcb, mdns_recv, NULL);
 
-  mdns_netif_client_id = netif_alloc_client_data_id();
+  if (1 == flag) {
+      flag = 0;
+      mdns_netif_client_id = netif_alloc_client_data_id();
+  }
 
 #if MDNS_RESP_USENETIF_EXTCALLBACK
   /* register for netif events when started on first netif */
   netif_add_ext_callback(&netif_callback, mdns_netif_ext_status_callback);
 #endif
 }
+/**
+ * @ingroup mdns
+ * Uninitiate MDNS responder. Will close UDP sockets on port 5353
+ */
+void
+mdns_resp_deinit(void)
+{
+    if (mdns_pcb != NULL) {
+        udp_remove(mdns_pcb);
+    }
+#if MDNS_RESP_USENETIF_EXTCALLBACK
+    /* unregister*/
+    netif_remove_ext_callback(&netif_callback);
+#endif
+}
 
+static void srv_txt(struct mdns_service *service, void *txt_userdata)
+{
+    err_enum_t res;
+    res = mdns_resp_add_service_txtitem(service, "path=/", 6);
+    LWIP_ERROR("mdns add service txt failed\n", (res == ERR_OK), return);
+}
+
+int mdns_responder_start(struct netif *netif)
+{
+    int ret, slot = -1;
+
+    if (netif == NULL) {
+        printf("netif is NULL\r\n");
+        return -1;
+    }
+
+    mdns_resp_init(); 
+    ret = mdns_resp_add_netif(netif, "mdns", 3600);
+    if (ret != 0) {
+        mdns_resp_deinit();
+        printf("add netif failed:%d\r\n", ret);
+        return -1;
+    }
+    slot = mdns_resp_add_service(netif, "mdns", "_http", DNSSD_PROTO_TCP, 80, 3600, srv_txt, NULL);
+    if (slot < 0) {
+        mdns_resp_remove_netif(netif);
+        mdns_resp_deinit();
+        printf("add server failed:%d\r\n", slot);
+        return -1;
+    }
+    return slot;
+}
+
+int mdns_responder_stop(struct netif *netif)
+{
+    int ret;
+
+    if (netif == NULL) {
+        printf("netif is NULL\r\n");
+        return -1;
+    }
+    
+    ret = mdns_resp_remove_netif(netif);
+    if (ret != 0) {
+        printf("remove netif failed:%d\r\n", ret);
+        return -1;
+    }
+    mdns_resp_deinit();
+    return 0;
+}
 #endif /* LWIP_MDNS_RESPONDER */
+
+
+
+
+
+
+
+
+
+
+

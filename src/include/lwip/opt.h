@@ -48,7 +48,12 @@
  * Include user defined options first. Anything not defined in these files
  * will be set to standard values. Override anything you don't like!
  */
+#if __has_include("lwipopts_user.h")
+#include "lwipopts_user.h"
+#include "stdbool.h"
+#else
 #include "lwipopts.h"
+#endif
 #include "lwip/debug.h"
 
 /**
@@ -110,6 +115,9 @@
 #endif
 #endif
 
+#if !defined LWIP_IGMP_TIMERS_ONDEMAND || defined __DOXYGEN__
+#define LWIP_IGMP_TIMERS_ONDEMAND       0
+#endif
 /**
  * LWIP_TIMERS_CUSTOM==1: Provide your own timer implementation.
  * Function prototypes in timeouts.h and the array of lwip-internal cyclic timers
@@ -505,7 +513,7 @@
  * The number of sys timeouts used by the core stack (not apps)
  * The default number of timeouts is calculated here for all enabled modules.
  */
-#define LWIP_NUM_SYS_TIMEOUT_INTERNAL   (LWIP_TCP + IP_REASSEMBLY + LWIP_ARP + (2*LWIP_DHCP) + LWIP_AUTOIP + LWIP_IGMP + LWIP_DNS + PPP_NUM_TIMEOUTS + (LWIP_IPV6 * (1 + LWIP_IPV6_REASS + LWIP_IPV6_MLD)))
+#define LWIP_NUM_SYS_TIMEOUT_INTERNAL   (LWIP_TCP*3 + IP_REASSEMBLY + LWIP_ARP + (2*LWIP_DHCP) + LWIP_AUTOIP + (LWIP_IGMP_TIMERS_ONDEMAND ? 0 : LWIP_IGMP) + LWIP_DNS + PPP_NUM_TIMEOUTS + (LWIP_IPV6 * (1 + LWIP_IPV6_REASS + LWIP_IPV6_MLD)))
 
 /**
  * MEMP_NUM_SYS_TIMEOUT: the number of simultaneously active timeouts.
@@ -763,6 +771,14 @@
 #undef IP_FRAG
 #define IP_FRAG                         0
 #endif /* !LWIP_IPV4 */
+
+/**
+ * IP_NAPT==1: Enables IPv4 Network Address and Port Translation
+ * Note that IP_FORWARD needs to be enabled for NAPT to work
+ */
+#if !defined IP_NAPT || defined __DOXYGEN__
+#define IP_NAPT                      0
+#endif
 
 /**
  * IP_OPTIONS_ALLOWED: Defines the behavior for IP options.
@@ -1559,6 +1575,17 @@
  * @}
  */
 
+/**
+ * LWIP_PBUF_CUSTOM_DATA: Store private data on pbufs (e.g. timestamps)
+ * This extends struct pbuf so user can store custom data on every pbuf.
+ */
+#if !defined LWIP_PBUF_CUSTOM_DATA || defined __DOXYGEN__
+#define LWIP_PBUF_CUSTOM_DATA
+#endif
+/**
+ * @}
+ */
+
 /*
    ------------------------------------------------
    ---------- Network Interfaces options ----------
@@ -1601,7 +1628,7 @@
 #endif
 
 /**
- * LWIP_NETIF_EXT_STATUS_CALLBACK==1: Support an extended callback function 
+ * LWIP_NETIF_EXT_STATUS_CALLBACK==1: Support an extended callback function
  * for several netif related event that supports multiple subscribers.
  * @see netif_ext_status_callback
  */
@@ -2230,6 +2257,14 @@
 #define MIB2_STATS                      0
 #endif
 
+/**
+ * IP_NAPT_STATS==1: Stats for IP NAPT.
+ */
+#if !defined IP_NAPT_STATS || defined __DOXYGEN__
+#define IP_NAPT_STATS                   (IP_NAPT)
+#endif
+
+
 #else
 
 #define LINK_STATS                      0
@@ -2250,6 +2285,7 @@
 #define MLD6_STATS                      0
 #define ND6_STATS                       0
 #define MIB2_STATS                      0
+#define IP_NAPT_STATS                   0
 
 #endif /* LWIP_STATS */
 /**
@@ -2389,7 +2425,7 @@
  * All addresses that have a scope according to the default policy (link-local
  * unicast addresses, interface-local and link-local multicast addresses) should
  * now have a zone set on them before being passed to the core API, although
- * lwIP will currently attempt to select a zone on the caller's behalf when 
+ * lwIP will currently attempt to select a zone on the caller's behalf when
  * necessary. Applications that directly assign IPv6 addresses to interfaces
  * (which is NOT recommended) must now ensure that link-local addresses carry
  * the netif's zone. See the new ip6_zone.h header file for more information and
@@ -2741,6 +2777,10 @@
 #define LWIP_HOOK_FILENAME "path/to/my/lwip_hooks.h"
 #endif
 
+#ifdef CONFIG_LWIP_HOOK_ND6_GET_GW_DEFAULT
+#define LWIP_HOOK_FILENAME "lwip_default_hooks.h"
+#endif
+
 /**
  * LWIP_HOOK_TCP_ISN:
  * Hook for generation of the Initial Sequence Number (ISN) for a new TCP
@@ -3027,8 +3067,8 @@
  * - src: source eth address
  * - dst: destination eth address
  * - eth_type: ethernet type to packet to be sent\n
- * 
- * 
+ *
+ *
  * Return values:
  * - &lt;0: Packet shall not contain VLAN header.
  * - 0 &lt;= return value &lt;= 0xFFFF: Packet shall contain VLAN header. Return value is prio_vid in host byte order.
@@ -3495,6 +3535,13 @@
 #define LWIP_TESTMODE                   0
 #endif
 
+/**
+ * NAPT_DEBUG: Enable debugging for NAPT.
+ */
+#ifndef NAPT_DEBUG
+#define NAPT_DEBUG                       LWIP_DBG_OFF
+#endif
+
 /*
    --------------------------------------------------
    ---------- Performance tracking options ----------
@@ -3511,6 +3558,30 @@
  */
 #if !defined LWIP_PERF || defined __DOXYGEN__
 #define LWIP_PERF                       0
+#endif
+
+#if !defined TCP_TIMER_PRECISE_NEEDED || defined __DOXYGEN__
+#define TCP_TIMER_PRECISE_NEEDED        0
+#endif
+
+#if !defined DHCP_TIMER_PRECISE_NEEDED || defined __DOXYGEN__
+#define DHCP_TIMER_PRECISE_NEEDED       0
+#endif
+
+#if !defined ARP_TIMER_PRECISE_NEEDED || defined __DOXYGEN__
+#define ARP_TIMER_PRECISE_NEEDED        0
+#endif
+
+#if !defined IPV6_TIMER_PRECISE_NEEDED || defined __DOXYGEN__
+#define IPV6_TIMER_PRECISE_NEEDED       0
+#endif
+
+#if !defined IP4_FRAG_TIMER_PRECISE_NEEDED || defined __DOXYGEN__
+#define IP4_FRAG_TIMER_PRECISE_NEEDED   0
+#endif
+
+#if !defined DNS_TIMER_PRECISE_NEEDED || defined __DOXYGEN__
+#define DNS_TIMER_PRECISE_NEEDED        0
 #endif
 /**
  * @}

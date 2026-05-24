@@ -494,13 +494,19 @@ pbuf_add_header_impl(struct pbuf *p, size_t header_size_increment, u8_t force)
 
   /* pbuf types containing payloads? */
   if (type_internal & PBUF_TYPE_FLAG_STRUCT_DATA_CONTIGUOUS) {
+    int sizeof_pbuf;
     /* set new payload pointer */
     payload = (u8_t *)p->payload - header_size_increment;
+
+    sizeof_pbuf = (p->flags & PBUF_FLAG_IS_CUSTOM)
+      ? LWIP_MEM_ALIGN_SIZE(sizeof(struct pbuf_custom))
+      : LWIP_MEM_ALIGN_SIZE(sizeof(struct pbuf));
+
     /* boundary check fails? */
-    if ((u8_t *)payload < (u8_t *)p + SIZEOF_STRUCT_PBUF) {
+    if ((u8_t *)payload < (u8_t *)p + sizeof_pbuf) {
       LWIP_DEBUGF( PBUF_DEBUG | LWIP_DBG_TRACE,
                    ("pbuf_add_header: failed as %p < %p (not enough space for new header size)\n",
-                    (void *)payload, (void *)((u8_t *)p + SIZEOF_STRUCT_PBUF)));
+                    (void *)payload, (void *)((u8_t *)p + sizeof_pbuf)));
       /* bail out unsuccessfully */
       return 1;
     }

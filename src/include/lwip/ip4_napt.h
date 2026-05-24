@@ -1,6 +1,8 @@
 /**
- * @file
- * IP protocol definitions
+ * @file ip4_napt.h
+ * This is a private interface of ip4_napt used from ip4.c
+ *
+ * @see ip4_napt.c
  */
 
 /*
@@ -31,30 +33,66 @@
  *
  * This file is part of the lwIP TCP/IP stack.
  *
- * Author: Adam Dunkels <adam@sics.se>
+ * original reassembly code by Adam Dunkels <adam@sics.se>
  *
  */
-#ifndef LWIP_HDR_PROT_IP_H
-#define LWIP_HDR_PROT_IP_H
 
-#include "lwip/arch.h"
+#ifndef LWIP_HDR_IP4_NAPT_H
+#define LWIP_HDR_IP4_NAPT_H
+
+#include "lwip/opt.h"
+
+#if IP_FORWARD
+#if IP_NAPT
+
+#include "lwip/def.h"
+#include "lwip/pbuf.h"
+#include "lwip/ip4_addr.h"
+#include "lwip/err.h"
+#include "lwip/netif.h"
+#include "lwip/prot/ip4.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#define IP_PROTO_ICMP    1
-#define IP_PROTO_IGMP    2
-#define IP_PROTO_UDP     17
-#define IP_PROTO_ICMPV6    58
-#define IP_PROTO_UDPLITE 136
-#define IP_PROTO_TCP     6
+#include "lwip/err.h"
+#include "lwip/ip4.h"
 
-/** This operates on a void* by loading the first byte */
-#define IP_HDR_GET_VERSION(ptr)   ((*(u8_t*)(ptr)) >> 4)
+
+#ifndef NAPT_TMR_INTERVAL
+#define NAPT_TMR_INTERVAL 2000
+#endif
+
+/**
+ * NAPT for a forwarded packet. It checks weather we need NAPT and modify
+ * the packet source address and port if needed.
+ *
+ * @param p the packet to forward (p->payload points to IP header)
+ * @param iphdr the IP header of the input packet
+ * @param inp the netif on which this packet was received
+ * @param outp the netif on which this packet will be sent
+ * @return ERR_OK if packet should be sent, or ERR_RTE if it should be dropped
+ */
+err_t
+ip_napt_forward(struct pbuf *p, struct ip_hdr *iphdr, struct netif *inp, struct netif *outp);
+
+/**
+ * NAPT for an input packet. It checks weather the destination is on NAPT
+ * table and modify the packet destination address and port if needed.
+ *
+ * @param p the packet to forward (p->payload points to IP header)
+ * @param iphdr the IP header of the input packet
+ */
+void
+ip_napt_recv(struct pbuf *p, struct ip_hdr *iphdr);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* LWIP_HDR_PROT_IP_H */
+#endif /* IP_NAPT */
+#endif /* IP_FORWARD */
+
+#endif /* LWIP_HDR_IP4_NAPT_H */
+

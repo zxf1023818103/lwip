@@ -70,7 +70,7 @@
 
 #if defined(MBEDTLS_PLATFORM_MEMORY) && \
    (!defined(MBEDTLS_PLATFORM_FREE_MACRO) || \
-    defined(MBEDTLS_PLATFORM_CALLOC_MACRO))
+    !defined(MBEDTLS_PLATFORM_CALLOC_MACRO))
 #define ALTCP_MBEDTLS_PLATFORM_ALLOC 1
 #else
 #define ALTCP_MBEDTLS_PLATFORM_ALLOC 0
@@ -203,6 +203,7 @@ void
 altcp_mbedtls_free_config(void *item)
 {
   LWIP_ASSERT("item != NULL", item != NULL);
+  mbedtls_ssl_config_free(item);
   mem_free(item);
 }
 

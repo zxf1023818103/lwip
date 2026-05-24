@@ -280,6 +280,15 @@ recv_udp(void *arg, struct udp_pcb *pcb, struct pbuf *p,
     API_EVENT(conn, NETCONN_EVT_RCVPLUS, len);
   }
 }
+
+/**
+ * Check if the udp pcb is owned by a netconn object,
+ * it returns 1 on yes, 0 otherwise.
+ */
+int udp_owner_is_netconn(struct udp_pcb *pcb)
+{
+  return pcb ? pcb->recv == recv_udp : 0;
+}
 #endif /* LWIP_UDP */
 
 #if LWIP_TCP
@@ -340,6 +349,19 @@ recv_tcp(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err)
   }
 
   return ERR_OK;
+}
+
+/**
+ * Check if the tcp pcb is owned by a netconn object,
+ * it returns 1 on yes, 0 otherwise.
+ */
+int tcp_owner_is_netconn(struct tcp_pcb *pcb)
+{
+#if LWIP_CALLBACK_API
+  return pcb ? pcb->recv == recv_tcp : 0;
+#else
+  return 0;
+#endif
 }
 
 /**
@@ -519,8 +541,29 @@ setup_tcp(struct netconn *conn)
   tcp_arg(pcb, conn);
   tcp_recv(pcb, recv_tcp);
   tcp_sent(pcb, sent_tcp);
+#if !TCP_TIMER_PRECISE_NEEDED
   tcp_poll(pcb, poll_tcp, NETCONN_TCP_POLL_INTERVAL);
+#else
+  /* comment 'tcp_poll(pcb, poll_tcp, NETCONN_TCP_POLL_INTERVAL);'
+     Dynamic registration for TCP writting, lwip_netconn_do_close_internal function
+     has already unregistered for abnormal close situations, and re-registered for
+     unfinished close.
+   */
+#endif
   tcp_err(pcb, err_tcp);
+}
+
+int lwip_netconn_is_tcp_polling(struct netconn *conn)
+{
+  struct tcp_pcb *pcb;
+  int polling = 0;
+
+  if(conn && conn->type == NETCONN_TCP) {
+    pcb = conn->pcb.tcp;
+    polling = pcb->pollinterval > 0 ? 1 :0;
+  }
+
+  return polling;
 }
 
 /**
@@ -1773,6 +1816,11 @@ err_mem:
            to partial write or not */
         err = (conn->current_msg->msg.w.offset == 0) ? ERR_WOULDBLOCK : ERR_OK;
         write_finished = 1;
+      } else {
+#if TCP_TIMER_PRECISE_NEEDED
+        void tcpip_tcp_poll_timer(void);
+        sys_timeouts_set_timer_enable(true, tcpip_tcp_poll_timer);
+#endif
       }
     } else {
       /* On errors != ERR_MEM, we don't try writing any more but return
@@ -1787,6 +1835,11 @@ err_mem:
     conn->current_msg->err = err;
     conn->current_msg = NULL;
     conn->state = NETCONN_NONE;
+#if TCP_TIMER_PRECISE_NEEDED
+    /* After conn->state transfer NETCONN_NONE because of write finish, unregister.
+     */
+    tcp_poll(conn->pcb.tcp, NULL, 0);
+#endif
 #if LWIP_TCPIP_CORE_LOCKING
     if (delayed)
 #endif
@@ -1823,6 +1876,14 @@ lwip_netconn_do_write(void *m)
         err = ERR_INPROGRESS;
       } else if (msg->conn->pcb.tcp != NULL) {
         msg->conn->state = NETCONN_WRITE;
+#if TCP_TIMER_PRECISE_NEEDED
+        /* After conn->state transfer NETCONN_WRITE because of write more, register.
+           The following lwip_netconn_do_writemore will unregister it.
+         */
+        tcp_poll(msg->conn->pcb.tcp, poll_tcp, NETCONN_TCP_POLL_INTERVAL);
+        void tcp_timer_needed(void);
+        tcp_timer_needed();
+#endif
         /* set all the variables used by lwip_netconn_do_writemore */
         LWIP_ASSERT("already writing or closing", msg->conn->current_msg == NULL);
         LWIP_ASSERT("msg->msg.w.len != 0", msg->msg.w.len != 0);

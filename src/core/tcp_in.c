@@ -61,6 +61,11 @@
 
 #include <string.h>
 
+#ifdef CONFIG_DUAL_STACK
+#include "lwip/etharp.h"
+#include <dual_stack_input.h>
+#endif
+
 #ifdef LWIP_HOOK_FILENAME
 #include LWIP_HOOK_FILENAME
 #endif
@@ -134,6 +139,11 @@ tcp_input(struct pbuf *p, struct netif *inp)
 
   TCP_STATS_INC(tcp.recv);
   MIB2_STATS_INC(mib2.tcpinsegs);
+
+#if TCP_TIMER_PRECISE_NEEDED
+  /* compensate tcp_ticks */
+  tcpip_tmr_compensate_tick();
+#endif
 
   tcphdr = (struct tcp_hdr *)p->payload;
 
@@ -246,6 +256,14 @@ tcp_input(struct pbuf *p, struct netif *inp)
   /* Demultiplex an incoming segment. First, we check if it is destined
      for an active connection. */
   prev = NULL;
+
+#if TCP_TIMER_PRECISE_NEEDED
+  /* bouffalo lp change
+   * TCP_TMR Optimization, only enable tcp_tmr MAX_TCP_ONCE_RUNNING_TIME
+   **/
+  LWIP_DEBUGF(TCP_DEBUG, ("tcp_timer_opt tcp_input"));
+  tcp_timer_needed();
+#endif
 
   for (pcb = tcp_active_pcbs; pcb != NULL; pcb = pcb->next) {
     LWIP_ASSERT("tcp_input: active pcb->state != CLOSED", pcb->state != CLOSED);
@@ -570,6 +588,18 @@ aborted:
       inseg.p = NULL;
     }
   } else {
+#ifdef CONFIG_DUAL_STACK
+    tcphdr->src = lwip_htons(tcphdr->src);
+    tcphdr->dest = lwip_htons(tcphdr->dest);
+    tcphdr->seqno = lwip_htonl(tcphdr->seqno);
+    tcphdr->ackno = lwip_htonl(tcphdr->ackno);
+    tcphdr->wnd = lwip_htons(tcphdr->wnd);
+    pbuf_header_force(p, (s16_t)(SIZEOF_ETH_HDR + ip_current_header_tot_len() + hdrlen_bytes));
+    pbuf_ref(p);
+    if (dual_stack_input(p, NULL)) {
+      pbuf_free(p);
+    }
+#else
     /* If no matching PCB was found, send a TCP RST (reset) to the
        sender. */
     LWIP_DEBUGF(TCP_RST_DEBUG, ("tcp_input: no PCB match found, resetting.\n"));
@@ -579,6 +609,7 @@ aborted:
       tcp_rst(NULL, ackno, seqno + tcplen, ip_current_dest_addr(),
               ip_current_src_addr(), tcphdr->dest, tcphdr->src);
     }
+#endif
     pbuf_free(p);
   }
 
@@ -765,6 +796,14 @@ tcp_timewait_input(struct tcp_pcb *pcb)
     pcb->tmr = tcp_ticks;
   }
 
+#if TCP_TIMER_PRECISE_NEEDED
+  /* bouffalo lp change
+   * TCP_TMR Optimization, only enable tcp_tmr MAX_TCP_ONCE_RUNNING_TIME
+   **/
+  pcb->keep_cnt_sent = 0;
+  tcp_keepalive_timer_stop(pcb);
+#endif
+
   if ((tcplen > 0)) {
     /* Acknowledge data, FIN or out-of-window SYN */
     tcp_ack_now(pcb);
@@ -890,10 +929,15 @@ tcp_process(struct tcp_pcb *pcb)
 
         /* If there's nothing left to acknowledge, stop the retransmit
            timer, otherwise reset it to start again */
+#if !TCP_TIMER_PRECISE_NEEDED
         if (pcb->unacked == NULL) {
           pcb->rtime = -1;
         } else {
           pcb->rtime = 0;
+#else
+        if (pcb->unacked != NULL) {
+          pcb->rtime = tcp_ticks;
+#endif
           pcb->nrtx = 0;
         }
 
@@ -914,7 +958,11 @@ tcp_process(struct tcp_pcb *pcb)
           connection faster, but do not send more SYNs than we otherwise would
           have, or we might get caught in a loop on loopback interfaces. */
         if (pcb->nrtx < TCP_SYNMAXRTX) {
+#if !TCP_TIMER_PRECISE_NEEDED
           pcb->rtime = 0;
+#else
+          pcb->rtime = tcp_ticks;
+#endif
           tcp_rexmit_rto(pcb);
         }
       }
@@ -1038,6 +1086,15 @@ tcp_process(struct tcp_pcb *pcb)
     default:
       break;
   }
+#if TCP_TIMER_PRECISE_NEEDED
+  /* bouffalo lp change
+   * TCP_TMR Optimization, only enable tcp_tmr MAX_TCP_ONCE_RUNNING_TIME
+   **/
+  if (pcb->state == ESTABLISHED) {
+    pcb->keep_cnt_sent = 0;
+    tcp_keepalive_timer_start(pcb);
+  }
+#endif
   return ERR_OK;
 }
 
@@ -1179,7 +1236,11 @@ tcp_receive(struct tcp_pcb *pcb)
      * 1) It doesn't ACK new data
      * 2) length of received packet is zero (i.e. no payload)
      * 3) the advertised window hasn't changed
+#if !TCP_TIMER_PRECISE_NEEDED
      * 4) There is outstanding unacknowledged data (retransmission timer running)
+#else
+     * 4) There is outstanding unacknowledged data (having unacked data)
+#endif
      * 5) The ACK is == biggest ACK sequence number so far seen (snd_una)
      *
      * If it passes all five, should process as a dupack:
@@ -1201,7 +1262,11 @@ tcp_receive(struct tcp_pcb *pcb)
         /* Clause 3 */
         if (pcb->snd_wl2 + pcb->snd_wnd == right_wnd_edge) {
           /* Clause 4 */
+#if !TCP_TIMER_PRECISE_NEEDED
           if (pcb->rtime >= 0) {
+#else
+          if (pcb->unacked != NULL) {
+#endif
             /* Clause 5 */
             if (pcb->lastack == ackno) {
               found_dupack = 1;
@@ -1292,6 +1357,7 @@ tcp_receive(struct tcp_pcb *pcb)
 
       /* If there's nothing left to acknowledge, stop the retransmit
          timer, otherwise reset it to start again */
+#if !TCP_TIMER_PRECISE_NEEDED
       if (pcb->unacked == NULL) {
         pcb->rtime = -1;
       } else {
@@ -1299,6 +1365,13 @@ tcp_receive(struct tcp_pcb *pcb)
       }
 
       pcb->polltmr = 0;
+#else
+      if (pcb->unacked != NULL) {
+        pcb->rtime = tcp_ticks;
+      }
+
+      pcb->polltmr = tcp_ticks;
+#endif
 
 #if TCP_OVERSIZE
       if (pcb->unsent == NULL) {
