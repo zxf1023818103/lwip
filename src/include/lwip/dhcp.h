@@ -61,9 +61,12 @@ typedef DHCP_TIMEOUT_SIZE_T dhcp_timeout_t;
 typedef u16_t dhcp_timeout_t;
 #endif /* DHCP_TIMEOUT_SIZE_T*/
 /** period (in seconds) of the application calling dhcp_coarse_tmr() */
-#ifndef DHCP_COARSE_TIMER_SECS
+#if CONFIG_LWIP_DHCP_COARSE_TIMER
+#define DHCP_COARSE_TIMER_SECS CONFIG_LWIP_DHCP_COARSE_TIMER    //Realtek add
+#else
 #define DHCP_COARSE_TIMER_SECS  60
-#endif /* DHCP_COARSE_TIMER_SECS */
+#endif
+
 /** period (in milliseconds) of the application calling dhcp_coarse_tmr() */
 #define DHCP_COARSE_TIMER_MSECS (DHCP_COARSE_TIMER_SECS * 1000UL)
 /** period (in milliseconds) of the application calling dhcp_fine_tmr() */
@@ -104,6 +107,7 @@ struct dhcp
   ip4_addr_t offered_ip_addr;
   ip4_addr_t offered_sn_mask;
   ip4_addr_t offered_gw_addr;
+  ip4_addr_t offered_bc_addr;        //Realtek add end
 
   u32_t offered_t0_lease; /* lease period (in seconds) */
   u32_t offered_t1_renew; /* recommended renew time (usually 50% of lease period) */
@@ -112,6 +116,7 @@ struct dhcp
   ip4_addr_t offered_si_addr;
   char boot_file_name[DHCP_BOOT_FILE_LEN];
 #endif /* LWIP_DHCP_BOOTPFILE */
+  u32_t seconds_elapsed;            //Realtek add end
 #if LWIP_DHCP_DOES_ACD_CHECK
   /** acd struct */
   struct acd acd;

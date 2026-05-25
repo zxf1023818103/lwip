@@ -306,6 +306,14 @@ ip4_forward(struct pbuf *p, struct ip_hdr *iphdr, struct netif *inp)
     /* @todo: send ICMP_DUR_NET? */
     goto return_noroute;
   }
+//Realtek add
+#ifdef CONFIG_DONT_CARE_TP
+  /* Do not forward packets onto the same network interface on which
+   * they arrived. */
+     if((netif->flags & NETIF_FLAG_IPSWITCH) == 0)
+     {
+#endif
+//Realtek add
 #if !IP_FORWARD_ALLOW_TX_ON_RX_NETIF
   /* Do not forward packets onto the same network interface on which
    * they arrived. */
@@ -314,7 +322,11 @@ ip4_forward(struct pbuf *p, struct ip_hdr *iphdr, struct netif *inp)
     goto return_noroute;
   }
 #endif /* IP_FORWARD_ALLOW_TX_ON_RX_NETIF */
-
+//Realtek add
+#ifdef CONFIG_DONT_CARE_TP
+    }
+#endif
+//Realtek add
   /* decrement TTL */
   IPH_TTL_SET(iphdr, IPH_TTL(iphdr) - 1);
   /* send ICMP if TTL == 0 */
@@ -379,8 +391,11 @@ ip4_forward(struct pbuf *p, struct ip_hdr *iphdr, struct netif *inp)
   IP_STATS_INC(ip.xmit);
 
   PERF_STOP("ip4_forward");
-  /* don't fragment if interface has mtu set to 0 [loopif] */
+#ifdef CONFIG_DONT_CARE_TP
+  if ((netif->flags & NETIF_FLAG_IPSWITCH) &&(netif->mtu && (p->tot_len > netif->mtu)) ){            //Realtek add
+#else
   if (netif->mtu && (p->tot_len > netif->mtu)) {
+#endif
     if ((IPH_OFFSET(iphdr) & PP_NTOHS(IP_DF)) == 0) {
 #if IP_FRAG
       ip4_frag(p, netif, ip4_current_dest_addr());
@@ -654,7 +669,12 @@ ip4_input(struct pbuf *p, struct netif *inp)
     LWIP_DEBUGF(IP_DEBUG | LWIP_DBG_TRACE, ("ip4_input: packet not for us.\n"));
 #if IP_FORWARD
     /* non-broadcast packet? */
-    if (!ip4_addr_isbroadcast(ip4_current_dest_addr(), inp)) {
+#ifdef CONFIG_DONT_CARE_TP
+    if(inp->flags & NETIF_FLAG_IPSWITCH)             //Realtek add
+#else
+    if (!ip4_addr_isbroadcast(ip4_current_dest_addr(), inp))
+#endif
+    {
       /* try to forward IP packet on (other) interfaces */
       ip4_forward(p, (struct ip_hdr *)p->payload, inp);
     } else

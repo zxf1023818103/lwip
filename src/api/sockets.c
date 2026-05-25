@@ -1105,8 +1105,8 @@ lwip_recv_tcp_from(struct lwip_sock *sock, struct sockaddr *from, socklen_t *fro
 #endif /* !SOCKETS_DEBUG */
   {
     /* get remote addr/port from tcp_pcb */
-    u16_t port;
-    ip_addr_t tmpaddr;
+    u16_t port = 0;
+    ip_addr_t tmpaddr = {0};
     netconn_getaddr(sock->conn, &tmpaddr, &port, 0);
     LWIP_DEBUGF(SOCKETS_DEBUG, ("%s(%d):  addr=", dbg_fn, dbg_s));
     ip_addr_debug_print_val(SOCKETS_DEBUG, tmpaddr);
@@ -2794,6 +2794,15 @@ lwip_getpeername(int s, struct sockaddr *name, socklen_t *namelen)
   return lwip_getaddrname(s, name, namelen, 0);
 }
 
+/* Added by Realtek start */
+int
+lwip_getsocklasterr(int s)
+{
+  struct lwip_sock *sock = get_socket(s);
+  return sock->errevent;
+}
+/* Added by Realtek end */
+
 int
 lwip_getsockname(int s, struct sockaddr *name, socklen_t *namelen)
 {
@@ -3010,12 +3019,42 @@ lwip_getsockopt_impl(int s, int level, int optname, void *optval, socklen_t *opt
 
 #if LWIP_SO_SNDTIMEO
         case SO_SNDTIMEO:
+/* Added by Realtek start */
+/* compatible with int and timeval */
+#if LWIP_SO_SNDRCVTIMEO_NONSTANDARD
+          if(sizeof(struct timeval) == *optlen) {
+              ((struct timeval *)(optval))->tv_sec = netconn_get_sendtimeout(sock->conn) / 1000U;
+              ((struct timeval *)(optval))->tv_usec = (netconn_get_sendtimeout(sock->conn) % 1000U) * 1000U;
+              break;
+          }
+#else
+          if(sizeof(int) == *optlen) {
+              *((int *) optval) = netconn_get_sendtimeout(sock->conn);
+              break;
+          }
+#endif
+/* Added by Realtek end */
           LWIP_SOCKOPT_CHECK_OPTLEN_CONN(sock, *optlen, LWIP_SO_SNDRCVTIMEO_OPTTYPE);
           LWIP_SO_SNDRCVTIMEO_SET(optval, netconn_get_sendtimeout(sock->conn));
           break;
 #endif /* LWIP_SO_SNDTIMEO */
 #if LWIP_SO_RCVTIMEO
         case SO_RCVTIMEO:
+/* Added by Realtek start */
+/* compatible with int and timeval */
+#if LWIP_SO_SNDRCVTIMEO_NONSTANDARD
+          if(sizeof(struct timeval) == *optlen) {
+              ((struct timeval *)(optval))->tv_sec = netconn_get_recvtimeout(sock->conn) / 1000U;
+              ((struct timeval *)(optval))->tv_usec = (netconn_get_recvtimeout(sock->conn) % 1000U) * 1000U;
+              break;
+          }
+#else
+          if(sizeof(int) == *optlen) {
+              *((int *) optval) = netconn_get_recvtimeout(sock->conn);
+              break;
+          }
+#endif
+/* Added by Realtek end */
           LWIP_SOCKOPT_CHECK_OPTLEN_CONN(sock, *optlen, LWIP_SO_SNDRCVTIMEO_OPTTYPE);
           LWIP_SO_SNDRCVTIMEO_SET(optval, netconn_get_recvtimeout(sock->conn));
           break;
@@ -3396,6 +3435,20 @@ lwip_setsockopt_impl(int s, int level, int optname, const void *optval, socklen_
 
 #if LWIP_SO_SNDTIMEO
         case SO_SNDTIMEO: {
+/* Added by Realtek start */
+/* compatible with int and timeval */
+#if LWIP_SO_SNDRCVTIMEO_NONSTANDARD
+          if(sizeof(struct timeval) == optlen) {
+              netconn_set_sendtimeout(sock->conn, (((const struct timeval *)(optval))->tv_sec * 1000U) + (((const struct timeval *)(optval))->tv_usec / 1000U));
+              break;
+          }
+#else
+          if(sizeof(int) == optlen) {
+              netconn_set_sendtimeout(sock->conn, *((const int *) optval));
+              break;
+          }
+#endif
+/* Added by Realtek end */
           long ms_long;
           LWIP_SOCKOPT_CHECK_OPTLEN_CONN(sock, optlen, LWIP_SO_SNDRCVTIMEO_OPTTYPE);
           ms_long = LWIP_SO_SNDRCVTIMEO_GET_MS(optval);
@@ -3409,6 +3462,20 @@ lwip_setsockopt_impl(int s, int level, int optname, const void *optval, socklen_
 #endif /* LWIP_SO_SNDTIMEO */
 #if LWIP_SO_RCVTIMEO
         case SO_RCVTIMEO: {
+/* Added by Realtek start */
+/* compatible with int and timeval */
+#if LWIP_SO_SNDRCVTIMEO_NONSTANDARD
+          if(sizeof(struct timeval) == optlen) {
+              netconn_set_recvtimeout(sock->conn, (((const struct timeval *)(optval))->tv_sec * 1000U) + (((const struct timeval *)(optval))->tv_usec / 1000U));
+              break;
+          }
+#else
+          if(sizeof(int) == optlen) {
+              netconn_set_recvtimeout(sock->conn, *((const int *) optval));
+              break;
+          }
+#endif
+/* Added by Realtek end */
           long ms_long;
           LWIP_SOCKOPT_CHECK_OPTLEN_CONN(sock, optlen, LWIP_SO_SNDRCVTIMEO_OPTTYPE);
           ms_long = LWIP_SO_SNDRCVTIMEO_GET_MS(optval);

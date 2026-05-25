@@ -2747,10 +2747,10 @@
 
 /**
  * LWIP_IPV6_DHCP6_STATEFUL==1: enable DHCPv6 stateful address autoconfiguration.
- * (not supported, yet!)
+
  */
 #if !defined LWIP_IPV6_DHCP6_STATEFUL || defined __DOXYGEN__
-#define LWIP_IPV6_DHCP6_STATEFUL        0
+#define LWIP_IPV6_DHCP6_STATEFUL        LWIP_IPV6_DHCP6
 #endif
 
 /**

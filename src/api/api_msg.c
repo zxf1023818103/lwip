@@ -708,7 +708,7 @@ struct netconn *
 netconn_alloc(enum netconn_type t, netconn_callback callback)
 {
   struct netconn *conn;
-  int size;
+  int size = 0;
   u8_t init_flags = 0;
 
   conn = (struct netconn *)memp_malloc(MEMP_NETCONN);

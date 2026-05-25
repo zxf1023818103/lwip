@@ -57,6 +57,7 @@ extern "C" {
 
 struct tcp_pcb;
 struct tcp_pcb_listen;
+extern struct tcp_pcb *tcp_tw_pcbs;     //Realtek add: /* List of all TCP PCBs in TIME-WAIT. */
 
 /** Function prototype for tcp accept callback functions. Called when a new
  * connection can be accepted on a listening pcb.
@@ -476,6 +477,12 @@ err_t            tcp_write   (struct tcp_pcb *pcb, const void *dataptr, u16_t le
 void             tcp_setprio (struct tcp_pcb *pcb, u8_t prio);
 
 err_t            tcp_output  (struct tcp_pcb *pcb);
+
+//Realtek add
+#if LWIP_RANDOMIZE_INITIAL_LOCAL_PORTS
+void             tcp_randomize_local_port   (void);
+#endif
+//Realtek add end
 
 err_t            tcp_tcp_get_tcp_addrinfo(struct tcp_pcb *pcb, int local, ip_addr_t *addr, u16_t *port);
 

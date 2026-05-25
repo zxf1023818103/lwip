@@ -1037,6 +1037,24 @@ again:
   }
   return tcp_port;
 }
+//Realtek add start
+#if LWIP_RANDOMIZE_INITIAL_LOCAL_PORTS
+/**
+ * Randomize a new local TCP port once.
+ */
+void
+tcp_randomize_local_port(void)
+{
+  static int done = 0;
+
+  if (!done) {
+    done = 1;
+    LWIP_SRAND();
+    tcp_port = LWIP_RAND() % (TCP_LOCAL_PORT_RANGE_END - TCP_LOCAL_PORT_RANGE_START) + TCP_LOCAL_PORT_RANGE_START;
+  }
+}
+#endif  /* LWIP_RANDOMIZE_INITIAL_LOCAL_PORTS */
+//Realtek add end
 
 /**
  * @ingroup tcp_raw
@@ -1332,6 +1350,7 @@ tcp_slowtmr_start:
     /* Check if KEEPALIVE should be sent */
     if (ip_get_option(pcb, SOF_KEEPALIVE) &&
         ((pcb->state == ESTABLISHED) ||
+         (pcb->state == FIN_WAIT_1) ||            //Realtek add
          (pcb->state == CLOSE_WAIT))) {
       if ((u32_t)(tcp_ticks - pcb->tmr) >
           (pcb->keep_idle + TCP_KEEP_DUR(pcb)) / TCP_SLOW_INTERVAL) {

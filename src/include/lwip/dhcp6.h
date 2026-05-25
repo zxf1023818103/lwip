@@ -70,6 +70,11 @@ struct dhcp6
   u16_t request_timeout;
 #if LWIP_IPV6_DHCP6_STATEFUL
   /* @todo: add more members here to keep track of stateful DHCPv6 data, like lease times */
+  u8_t *server_id_buf;
+  u16_t server_id_len;
+  u8_t *ia_na_buf;
+  u16_t ia_na_len;
+
 #endif /* LWIP_IPV6_DHCP6_STATEFUL */
 };
 

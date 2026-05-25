@@ -453,12 +453,17 @@ tcpip_send_msg_wait_sem(tcpip_callback_fn fn, void *apimsg, sys_sem_t *sem)
   LWIP_ASSERT("semaphore not initialized", sys_sem_valid(sem));
   LWIP_ASSERT("Invalid mbox", sys_mbox_valid_val(tcpip_mbox));
 
+  UBaseType_t prio = uxTaskPriorityGet(NULL);       //Realtek add: add to prevent switch to tcpip thread between mbox post and sem wait
+  if((TCPIP_THREAD_PRIO + 1) > prio)
+    vTaskPrioritySet(NULL, TCPIP_THREAD_PRIO + 1);  //Realtek add: set priority higher than tcpip thread
+
   TCPIP_MSG_VAR_ALLOC(msg);
   TCPIP_MSG_VAR_REF(msg).type = TCPIP_MSG_API;
   TCPIP_MSG_VAR_REF(msg).msg.api_msg.function = fn;
   TCPIP_MSG_VAR_REF(msg).msg.api_msg.msg = apimsg;
   sys_mbox_post(&tcpip_mbox, &TCPIP_MSG_VAR_REF(msg));
   sys_arch_sem_wait(sem, 0);
+  vTaskPrioritySet(NULL, prio);                     //Realtek add: restore to original priority
   TCPIP_MSG_VAR_FREE(msg);
   return ERR_OK;
 #endif /* LWIP_TCPIP_CORE_LOCKING */
@@ -591,6 +596,7 @@ err_t
 tcpip_callbackmsg_trycallback_fromisr(struct tcpip_callback_msg *msg)
 {
   LWIP_ASSERT("Invalid mbox", sys_mbox_valid_val(tcpip_mbox));
+  /*return sys_mbox_trypost(&tcpip_mbox, msg);*/
   return sys_mbox_trypost_fromisr(&tcpip_mbox, msg);
 }
 
@@ -635,6 +641,13 @@ tcpip_callback_wait(tcpip_callback_fn function, void *ctx)
   sys_sem_free(&sem);
   return ERR_OK;
 #endif /* LWIP_TCPIP_CORE_LOCKING */
+//Realtek add
+#if defined (CONFIG_USE_TCM_HEAP) && CONFIG_USE_TCM_HEAP
+  sys_thread_new_tcm(TCPIP_THREAD_NAME, tcpip_thread, NULL, TCPIP_THREAD_STACKSIZE, TCPIP_THREAD_PRIO);
+#else
+  sys_thread_new(TCPIP_THREAD_NAME, tcpip_thread, NULL, TCPIP_THREAD_STACKSIZE, TCPIP_THREAD_PRIO);
+#endif
+//Realtek add end
 }
 
 /**
